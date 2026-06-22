@@ -1,0 +1,41 @@
+#!/bin/sh
+# shellcheck disable=SC2034,SC2086
+
+# PROVIDE: cloudflared
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="cloudflared"
+rcvar="cloudflared_enable"
+pidfile="/var/run/cloudflared.pid"
+procname="/usr/local/bin/cloudflared"
+command="/usr/sbin/daemon"
+
+load_rc_config "${name}"
+
+: "${cloudflared_enable:=NO}"
+: "${cloudflared_token_file:=/usr/local/etc/cloudflared/token}"
+: "${cloudflared_protocol:=auto}"
+: "${cloudflared_metrics:=}"
+: "${cloudflared_extra_args:=}"
+: "${cloudflared_logfile:=/var/log/cloudflared.log}"
+
+required_files="${cloudflared_token_file}"
+
+cloudflared_args="tunnel --no-autoupdate"
+if [ "${cloudflared_protocol}" != "" ] && [ "${cloudflared_protocol}" != "auto" ]; then
+	cloudflared_args="${cloudflared_args} --protocol ${cloudflared_protocol}"
+fi
+if [ "${cloudflared_metrics}" != "" ]; then
+	cloudflared_args="${cloudflared_args} --metrics ${cloudflared_metrics}"
+fi
+if [ "${cloudflared_extra_args}" != "" ]; then
+	cloudflared_args="${cloudflared_args} ${cloudflared_extra_args}"
+fi
+cloudflared_args="${cloudflared_args} run --token-file ${cloudflared_token_file}"
+
+command_args="-S -p ${pidfile} -T cloudflared -o ${cloudflared_logfile} -f ${procname} ${cloudflared_args}"
+
+run_rc_command "$1"

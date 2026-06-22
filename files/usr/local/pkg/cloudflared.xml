@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE packagegui SYSTEM "../schema/packages.dtd">
+<?xml-stylesheet type="text/xsl" href="../xsl/package.xsl"?>
+<packagegui>
+	<name>cloudflared</name>
+	<version>%%PKGVERSION%%</version>
+	<title>Services: Cloudflared</title>
+	<addedit_string>Cloudflared: changed settings</addedit_string>
+	<include_file>/usr/local/pkg/cloudflared.inc</include_file>
+	<configpath>installedpackages->cloudflared->config</configpath>
+	<aftersaveredirect>/pkg_edit.php?xml=cloudflared.xml</aftersaveredirect>
+	<service>
+		<name>cloudflared</name>
+		<rcfile>cloudflared</rcfile>
+		<executable>cloudflared</executable>
+		<description>Cloudflare Tunnel daemon</description>
+	</service>
+	<menu>
+		<name>Cloudflared</name>
+		<section>Services</section>
+		<configfile>cloudflared.xml</configfile>
+		<url>/pkg_edit.php?xml=cloudflared.xml</url>
+	</menu>
+	<menu>
+		<name>Cloudflared</name>
+		<section>Status</section>
+		<configfile>cloudflared.xml</configfile>
+		<url>/status_cloudflared.php</url>
+	</menu>
+	<tabs>
+		<tab>
+			<text>Settings</text>
+			<url>/pkg_edit.php?xml=cloudflared.xml</url>
+			<active/>
+		</tab>
+		<tab>
+			<text>Status</text>
+			<url>/status_cloudflared.php</url>
+		</tab>
+	</tabs>
+	<fields>
+		<field>
+			<name>Service</name>
+			<type>listtopic</type>
+		</field>
+		<field>
+			<fielddescr>Enable</fielddescr>
+			<fieldname>enable</fieldname>
+			<description>Start Cloudflared at boot and keep the tunnel service running.</description>
+			<type>checkbox</type>
+		</field>
+		<field>
+			<fielddescr>Tunnel Token</fielddescr>
+			<fieldname>token</fieldname>
+			<description>Cloudflare Tunnel token from Zero Trust. Stored locally as /usr/local/etc/cloudflared/token with mode 0600.</description>
+			<type>textarea</type>
+			<cols>80</cols>
+			<rows>4</rows>
+		</field>
+		<field>
+			<name>Runtime</name>
+			<type>listtopic</type>
+		</field>
+		<field>
+			<fielddescr>Protocol</fielddescr>
+			<fieldname>protocol</fieldname>
+			<description>Transport protocol. Use http2 if QUIC is unstable on this firewall.</description>
+			<type>select</type>
+			<options>
+				<option><name>Auto</name><value>auto</value></option>
+				<option><name>QUIC</name><value>quic</value></option>
+				<option><name>HTTP/2</name><value>http2</value></option>
+			</options>
+			<default_value>auto</default_value>
+		</field>
+		<field>
+			<fielddescr>Metrics Address</fielddescr>
+			<fieldname>metrics</fieldname>
+			<description>Optional cloudflared metrics listener, for example 127.0.0.1:60123.</description>
+			<type>input</type>
+		</field>
+		<field>
+			<fielddescr>Extra Arguments</fielddescr>
+			<fieldname>extra_args</fieldname>
+			<description>Optional advanced tunnel arguments inserted before run, for example --quic-disable-pmtu-discovery.</description>
+			<type>input</type>
+		</field>
+	</fields>
+	<custom_php_install_command>cloudflared_install();</custom_php_install_command>
+	<custom_php_deinstall_command>cloudflared_deinstall();</custom_php_deinstall_command>
+	<custom_php_validation_command>cloudflared_validate($_POST, $input_errors);</custom_php_validation_command>
+	<custom_php_resync_config_command>cloudflared_sync();</custom_php_resync_config_command>
+</packagegui>
