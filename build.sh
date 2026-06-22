@@ -72,7 +72,6 @@ www: "https://github.com/r0bb10/pfSense-Cloudflared"
 licenselogic: "single"
 licenses: ["APACHE20"]
 categories: ["net"]
-conflicts: ["cloudflared-[0-9]*"]
 scripts: {
   post-install: "${post_install_script}",
   pre-deinstall: "${pre_deinstall_script}"

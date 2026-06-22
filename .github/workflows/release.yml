@@ -67,7 +67,7 @@ jobs:
             }
 
   build:
-    if: needs.prepare.outputs.release_exists == 'false' || github.event_name == 'workflow_dispatch'
+    if: needs.prepare.outputs.release_exists == 'false' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     needs: prepare
     runs-on: ubuntu-latest
     steps:
@@ -110,6 +110,7 @@ jobs:
           name: pfSense cloudflared ${{ needs.prepare.outputs.version }}
           body: |
             pfSense package for official cloudflared `${{ needs.prepare.outputs.tag }}` built for FreeBSD 15 amd64 with BSD compatibility patches from `kjake/cloudflared`.
+          overwrite_files: true
           files: |
             pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
             SHA256SUMS
