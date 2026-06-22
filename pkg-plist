@@ -4,6 +4,7 @@ etc/rc.d/cloudflared
 pkg/cloudflared.inc
 pkg/cloudflared.xml
 %%DATADIR%%/info.xml
+www/shortcuts/pkg_cloudflared.inc
 www/status_cloudflared.php
 www/widgets/widgets/cloudflared.widget.php
 @dir /etc/inc/priv

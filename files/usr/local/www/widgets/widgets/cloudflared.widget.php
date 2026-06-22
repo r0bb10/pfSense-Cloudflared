@@ -25,18 +25,12 @@ function cloudflared_widget_escape($value) {
 }
 
 function cloudflared_widget_body() {
-	$settings = config_get_path('installedpackages/cloudflared/config/0', []);
 	$running = is_service_running('cloudflared');
 	$service_icon = $running ? 'fa-arrow-up text-success' : 'fa-arrow-down text-danger';
 	$service_label = $running ? gettext('Running') : gettext('Stopped');
-	$enabled = (($settings['enable'] ?? '') === 'on') ? gettext('Enabled') : gettext('Disabled');
-	$protocol = strtoupper($settings['protocol'] ?? 'auto');
-	$token_configured = (is_readable('/usr/local/etc/cloudflared/token') && filesize('/usr/local/etc/cloudflared/token') > 0) ? gettext('Yes') : gettext('No');
 	$version = is_executable('/usr/local/bin/cloudflared') ? trim(shell_exec('/usr/local/bin/cloudflared version 2>&1')) : gettext('Missing binary');
 	$html = '';
-	$html .= '<tr><th>' . cloudflared_widget_escape(gettext('Service')) . '</th><td><i class="fa-solid ' . $service_icon . '"></i> ' . cloudflared_widget_escape($service_label . ' / ' . $enabled) . '</td></tr>';
-	$html .= '<tr><th>' . cloudflared_widget_escape(gettext('Token')) . '</th><td>' . cloudflared_widget_escape($token_configured) . '</td></tr>';
-	$html .= '<tr><th>' . cloudflared_widget_escape(gettext('Protocol')) . '</th><td>' . cloudflared_widget_escape($protocol) . '</td></tr>';
+	$html .= '<tr><th>' . cloudflared_widget_escape(gettext('Service')) . '</th><td><i class="fa-solid ' . $service_icon . '"></i> ' . cloudflared_widget_escape($service_label) . '</td></tr>';
 	$html .= '<tr><th>' . cloudflared_widget_escape(gettext('Version')) . '</th><td>' . cloudflared_widget_escape($version) . '</td></tr>';
 	return $html;
 }

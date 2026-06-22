@@ -29,18 +29,6 @@ function cloudflared_redact($text) {
 	return $text;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-	if ($_POST['action'] === 'start') {
-		start_service('cloudflared');
-	} elseif ($_POST['action'] === 'stop') {
-		stop_service('cloudflared');
-	} elseif ($_POST['action'] === 'restart') {
-		restart_service('cloudflared');
-	}
-	header('Location: /status_cloudflared.php');
-	exit;
-}
-
 if (isset($_GET['ajax'])) {
 	header('Content-Type: application/json');
 	header('Cache-Control: no-store');
@@ -57,6 +45,7 @@ if (isset($_GET['ajax'])) {
 	exit;
 }
 
+$shortcut_section = 'cloudflared';
 $pgtitle = [gettext('Status'), gettext('Cloudflared')];
 include('head.inc');
 ?>
@@ -69,12 +58,6 @@ include('head.inc');
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Service')?></h2></div>
 	<div class="panel-body">
-		<form method="post" class="form-inline">
-			<button class="btn btn-success" type="submit" name="action" value="start"><?=gettext('Start')?></button>
-			<button class="btn btn-warning" type="submit" name="action" value="restart"><?=gettext('Restart')?></button>
-			<button class="btn btn-danger" type="submit" name="action" value="stop"><?=gettext('Stop')?></button>
-		</form>
-		<hr>
 		<table class="table table-striped table-condensed">
 			<tbody>
 				<tr><th><?=gettext('Enabled')?></th><td id="cloudflared-enabled">-</td></tr>

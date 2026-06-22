@@ -34,6 +34,7 @@ stage() {
 		"${STAGE}${PREFIX}/etc/rc.d" \
 		"${STAGE}${PREFIX}/pkg" \
 		"${STAGE}${PREFIX}/www" \
+		"${STAGE}${PREFIX}/www/shortcuts" \
 		"${STAGE}${PREFIX}/www/widgets/widgets" \
 		"${STAGE}${PREFIX}/share/${PORTNAME}" \
 		"${STAGE}/etc/inc/priv"
@@ -42,6 +43,7 @@ stage() {
 	install -m 0555 "${FILES}${PREFIX}/etc/rc.d/cloudflared" "${STAGE}${PREFIX}/etc/rc.d/cloudflared"
 	install -m 0644 "${FILES}${PREFIX}/pkg/cloudflared.xml" "${STAGE}${PREFIX}/pkg/cloudflared.xml"
 	install -m 0644 "${FILES}${PREFIX}/pkg/cloudflared.inc" "${STAGE}${PREFIX}/pkg/cloudflared.inc"
+	install -m 0644 "${FILES}${PREFIX}/www/shortcuts/pkg_cloudflared.inc" "${STAGE}${PREFIX}/www/shortcuts/pkg_cloudflared.inc"
 	install -m 0644 "${FILES}${PREFIX}/www/status_cloudflared.php" "${STAGE}${PREFIX}/www/status_cloudflared.php"
 	install -m 0644 "${FILES}${PREFIX}/www/widgets/widgets/cloudflared.widget.php" "${STAGE}${PREFIX}/www/widgets/widgets/cloudflared.widget.php"
 	install -m 0644 "${FILES}${PREFIX}/share/${PORTNAME}/info.xml" "${STAGE}${PREFIX}/share/${PORTNAME}/info.xml"
