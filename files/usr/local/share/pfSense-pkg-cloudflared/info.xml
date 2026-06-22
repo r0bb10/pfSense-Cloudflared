@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<pfsensepkgs>
+	<package>
+		<name>Cloudflared</name>
+		<internal_name>cloudflared</internal_name>
+		<descr><![CDATA[Cloudflare Tunnel daemon for pfSense.]]></descr>
+		<pkginfolink>https://github.com/r0bb10/pfSense-Cloudflared</pkginfolink>
+		<version>%%PKGVERSION%%</version>
+		<configurationfile>cloudflared.xml</configurationfile>
+	</package>
+</pfsensepkgs>

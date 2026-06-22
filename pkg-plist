@@ -1,0 +1,10 @@
+/etc/inc/priv/cloudflared.priv.inc
+bin/cloudflared
+etc/rc.d/cloudflared
+pkg/cloudflared.inc
+pkg/cloudflared.xml
+%%DATADIR%%/info.xml
+www/status_cloudflared.php
+www/widgets/widgets/cloudflared.widget.php
+@dir /etc/inc/priv
+@dir /etc/inc
