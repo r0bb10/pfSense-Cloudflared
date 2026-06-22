@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - name: Shell lint
+        run: shellcheck build.sh scripts/build-cloudflared-freebsd.sh files/pkg-install.in files/pkg-deinstall.in files/usr/local/etc/rc.d/cloudflared
+      - name: PHP lint
+        run: find files -type f \( -name '*.php' -o -name '*.inc' \) -print0 | xargs -0 -n1 php -l
+      - name: XML parse
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+          for path in pathlib.Path('files').rglob('*.xml'):
+              ET.parse(path)
+              print(path)
+          PY
+      - name: Build script missing binary guard
+        run: |
+          if ./build.sh stage 2>/tmp/build.err; then
+            echo 'build.sh unexpectedly succeeded without dist/cloudflared' >&2
+            exit 1
+          fi
+          grep -q 'Missing FreeBSD/amd64 binary' /tmp/build.err
+
+  freebsd-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - name: Resolve latest upstream release
+        id: upstream
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.repos.getLatestRelease({
+              owner: 'cloudflare',
+              repo: 'cloudflared'
+            });
+            core.setOutput('tag', data.tag_name);
+            core.setOutput('version', data.tag_name.replace(/^v/, ''));
+      - name: Build package on FreeBSD 15
+        uses: vmactions/freebsd-vm@v1.4.8
+        env:
+          PORTVERSION: ${{ steps.upstream.outputs.version }}
+        with:
+          release: '15.0'
+          usesh: true
+          mem: 4096
+          envs: PORTVERSION
+          prepare: |
+            export ASSUME_ALWAYS_YES=yes
+            pkg bootstrap -f
+            pkg update -f
+            pkg install -f -y git gmake go ca_root_nss
+          run: |
+            chmod +x build.sh scripts/build-cloudflared-freebsd.sh
+            ./scripts/build-cloudflared-freebsd.sh '${{ steps.upstream.outputs.tag }}'
+            ./build.sh package

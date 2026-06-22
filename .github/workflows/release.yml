@@ -1,0 +1,113 @@
+name: Track Upstream and Release
+
+on:
+  schedule:
+    - cron: '17 */12 * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Official cloudflared tag to build, defaults to latest release
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: upstream-release
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      release_exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - name: Resolve upstream release
+        id: resolve
+        uses: actions/github-script@v8
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+        with:
+          script: |
+            const tagInput = (process.env.TAG_INPUT || '').trim();
+            let tagName = tagInput;
+            if (!tagName) {
+              const { data } = await github.rest.repos.getLatestRelease({
+                owner: 'cloudflare',
+                repo: 'cloudflared'
+              });
+              tagName = data.tag_name;
+            }
+            core.setOutput('tag', tagName);
+            core.setOutput('version', tagName.replace(/^v/, ''));
+      - name: Check existing package release
+        id: check
+        uses: actions/github-script@v8
+        env:
+          RELEASE_TAG: pfsense-${{ steps.resolve.outputs.version }}
+        with:
+          script: |
+            try {
+              await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: process.env.RELEASE_TAG
+              });
+              core.setOutput('exists', 'true');
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              core.setOutput('exists', 'false');
+            }
+
+  build:
+    if: needs.prepare.outputs.release_exists == 'false' || github.event_name == 'workflow_dispatch'
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - name: Build cloudflared and package on FreeBSD 15
+        uses: vmactions/freebsd-vm@v1.4.8
+        env:
+          PORTVERSION: ${{ needs.prepare.outputs.version }}
+        with:
+          release: '15.0'
+          usesh: true
+          mem: 4096
+          envs: PORTVERSION
+          prepare: |
+            export ASSUME_ALWAYS_YES=yes
+            pkg bootstrap -f
+            pkg update -f
+            pkg install -f -y git gmake go ca_root_nss
+          run: |
+            chmod +x build.sh scripts/build-cloudflared-freebsd.sh
+            ./scripts/build-cloudflared-freebsd.sh '${{ needs.prepare.outputs.tag }}'
+            ./build.sh package
+            cp build/pkg/*.pkg ./pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
+      - name: Generate checksums
+        run: sha256sum pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg > SHA256SUMS
+      - name: Attest package
+        uses: actions/attest-build-provenance@v4.1.0
+        with:
+          subject-path: pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}
+          path: |
+            pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
+            SHA256SUMS
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3.0.1
+        with:
+          tag_name: pfsense-${{ needs.prepare.outputs.version }}
+          name: pfSense cloudflared ${{ needs.prepare.outputs.version }}
+          body: |
+            pfSense package for official cloudflared `${{ needs.prepare.outputs.tag }}` built for FreeBSD 15 amd64 with BSD compatibility patches from `kjake/cloudflared`.
+          files: |
+            pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
+            SHA256SUMS
