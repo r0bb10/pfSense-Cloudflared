@@ -52,10 +52,8 @@
 		<field>
 			<fielddescr>Tunnel Token</fielddescr>
 			<fieldname>token</fieldname>
-			<description>Cloudflare Tunnel token from Zero Trust. Stored locally as /usr/local/etc/cloudflared/token with mode 0600.</description>
-			<type>textarea</type>
-			<cols>80</cols>
-			<rows>4</rows>
+			<description>Cloudflare Tunnel token from Zero Trust. The token is stored in the pfSense configuration and backups, and written locally to /usr/local/etc/cloudflared/token with mode 0600.</description>
+			<type>password</type>
 		</field>
 		<field>
 			<name>Runtime</name>
@@ -80,9 +78,28 @@
 			<type>input</type>
 		</field>
 		<field>
+			<fielddescr>Log Level</fielddescr>
+			<fieldname>loglevel</fieldname>
+			<description>Cloudflared log verbosity.</description>
+			<type>select</type>
+			<options>
+				<option><name>Error</name><value>error</value></option>
+				<option><name>Warning</name><value>warn</value></option>
+				<option><name>Info</name><value>info</value></option>
+				<option><name>Debug</name><value>debug</value></option>
+			</options>
+			<default_value>info</default_value>
+		</field>
+		<field>
+			<fielddescr>Disable QUIC PMTU Discovery</fielddescr>
+			<fieldname>quic_disable_pmtu</fieldname>
+			<description>Add --quic-disable-pmtu-discovery. Enable only if QUIC is unstable or logs show repeated QUIC path issues.</description>
+			<type>checkbox</type>
+		</field>
+		<field>
 			<fielddescr>Extra Arguments</fielddescr>
 			<fieldname>extra_args</fieldname>
-			<description>Optional advanced tunnel arguments inserted before run, for example --quic-disable-pmtu-discovery.</description>
+			<description>Optional advanced tunnel arguments inserted before run. Avoid secrets here because arguments may appear in process listings.</description>
 			<type>input</type>
 		</field>
 	</fields>

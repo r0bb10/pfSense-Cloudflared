@@ -41,6 +41,11 @@ function cloudflared_validate(&$post, &$input_errors) {
 		$input_errors[] = gettext('Protocol must be Auto, QUIC, or HTTP/2.');
 	}
 
+	$loglevel = $post['loglevel'] ?? 'info';
+	if (!in_array($loglevel, ['error', 'warn', 'info', 'debug'], true)) {
+		$input_errors[] = gettext('Log level must be Error, Warning, Info, or Debug.');
+	}
+
 	$metrics = trim((string)($post['metrics'] ?? ''));
 	if ($metrics !== '' && !preg_match('/^[A-Za-z0-9_.:-]+:[0-9]{1,5}$/', $metrics)) {
 		$input_errors[] = gettext('Metrics address must look like 127.0.0.1:60123.');
@@ -80,12 +85,16 @@ function cloudflared_write_files() {
 	$enabled = cloudflared_enabled() ? 'YES' : 'NO';
 	$protocol = $settings['protocol'] ?? 'auto';
 	$metrics = trim((string)($settings['metrics'] ?? ''));
+	$loglevel = $settings['loglevel'] ?? 'info';
+	$quic_disable_pmtu = (($settings['quic_disable_pmtu'] ?? '') === 'on') ? 'YES' : 'NO';
 	$extra_args = trim((string)($settings['extra_args'] ?? ''));
 	$rcconf = '';
 	$rcconf .= "cloudflared_enable=\"{$enabled}\"\n";
 	$rcconf .= 'cloudflared_token_file="' . CLOUDFLARED_TOKEN_FILE . "\"\n";
 	$rcconf .= 'cloudflared_protocol="' . cloudflared_quote_rc_value($protocol) . "\"\n";
 	$rcconf .= 'cloudflared_metrics="' . cloudflared_quote_rc_value($metrics) . "\"\n";
+	$rcconf .= 'cloudflared_loglevel="' . cloudflared_quote_rc_value($loglevel) . "\"\n";
+	$rcconf .= "cloudflared_quic_disable_pmtu=\"{$quic_disable_pmtu}\"\n";
 	$rcconf .= 'cloudflared_extra_args="' . cloudflared_quote_rc_value($extra_args) . "\"\n";
 	$rcconf .= 'cloudflared_logfile="' . CLOUDFLARED_LOG_FILE . "\"\n";
 	file_put_contents(CLOUDFLARED_RCCONF, $rcconf, LOCK_EX);

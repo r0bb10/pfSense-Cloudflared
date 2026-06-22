@@ -19,17 +19,22 @@ load_rc_config "${name}"
 : "${cloudflared_token_file:=/usr/local/etc/cloudflared/token}"
 : "${cloudflared_protocol:=auto}"
 : "${cloudflared_metrics:=}"
+: "${cloudflared_loglevel:=info}"
+: "${cloudflared_quic_disable_pmtu:=NO}"
 : "${cloudflared_extra_args:=}"
 : "${cloudflared_logfile:=/var/log/cloudflared.log}"
 
 required_files="${cloudflared_token_file}"
 
-cloudflared_args="tunnel --no-autoupdate"
+cloudflared_args="--loglevel ${cloudflared_loglevel} tunnel --no-autoupdate"
 if [ "${cloudflared_protocol}" != "" ] && [ "${cloudflared_protocol}" != "auto" ]; then
 	cloudflared_args="${cloudflared_args} --protocol ${cloudflared_protocol}"
 fi
 if [ "${cloudflared_metrics}" != "" ]; then
 	cloudflared_args="${cloudflared_args} --metrics ${cloudflared_metrics}"
+fi
+if checkyesno cloudflared_quic_disable_pmtu; then
+	cloudflared_args="${cloudflared_args} --quic-disable-pmtu-discovery"
 fi
 if [ "${cloudflared_extra_args}" != "" ]; then
 	cloudflared_args="${cloudflared_args} ${cloudflared_extra_args}"
