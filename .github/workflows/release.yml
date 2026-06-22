@@ -1,6 +1,8 @@
 name: Track Upstream and Release
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '17 */12 * * *'
   workflow_dispatch:
