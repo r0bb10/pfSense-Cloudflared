@@ -1,8 +1,10 @@
 # pfSense Cloudflared
 
-pfSense package for Cloudflare Tunnel (`cloudflared`) on pfSense 2.8.x / FreeBSD 15 amd64.
+pfSense package for Cloudflare Tunnel (`cloudflared`) on pfSense 2.8.x.
 
-This repository builds the official upstream Cloudflare `cloudflared` source with the BSD compatibility overlay proven by `kjake/cloudflared`, then packages the resulting binary with pfSense WebGUI and service integration.
+This repository builds the official upstream Cloudflare `cloudflared` source
+with the BSD compatibility overlay proven by `kjake/cloudflared`, then packages
+the resulting binary with pfSense WebGUI and service integration.
 
 ## Scope
 
@@ -13,12 +15,10 @@ This repository builds the official upstream Cloudflare `cloudflared` source wit
 - Provide status page and dashboard widget.
 - Track official upstream `cloudflare/cloudflared` releases.
 
-## Local Package Build
+## Install
 
-The package build expects a FreeBSD/amd64 `cloudflared` binary at `dist/cloudflared`.
+To install download latest pkg in /tmp and run:
 
 ```sh
-./build.sh package
+pkg add -f /tmp/pfSense-pkg-cloudflared-*.pkg
 ```
-
-The GitHub workflow performs the full upstream source build and package creation on FreeBSD 15.
