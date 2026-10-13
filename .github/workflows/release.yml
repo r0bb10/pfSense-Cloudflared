@@ -26,8 +26,10 @@ jobs:
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       version: ${{ steps.resolve.outputs.version }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
       release_exists: ${{ steps.check.outputs.exists }}
     steps:
+      - uses: actions/checkout@v7.0.0
       - name: Resolve upstream release
         id: resolve
         uses: actions/github-script@v8
@@ -44,22 +46,33 @@ jobs:
               });
               tagName = data.tag_name;
             }
+            const version = tagName.replace(/^v/, '');
+            if (!/^\d+\.\d+\.\d+$/.test(version)) {
+              throw new Error('Invalid upstream Cloudflared version');
+            }
             core.setOutput('tag', tagName);
-            core.setOutput('version', tagName.replace(/^v/, ''));
+            core.setOutput('version', version);
+            core.setOutput('release_tag', version);
       - name: Check existing package release
         id: check
         uses: actions/github-script@v8
         env:
-          RELEASE_TAG: pfsense-${{ steps.resolve.outputs.version }}
+          RELEASE_TAG: ${{ steps.resolve.outputs.release_tag }}
+          UPSTREAM_TAG: ${{ steps.resolve.outputs.tag }}
         with:
           script: |
             try {
-              await github.rest.repos.getReleaseByTag({
+              const { data } = await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 tag: process.env.RELEASE_TAG
               });
-              core.setOutput('exists', 'true');
+              const body = data.body || '';
+              const upstreamTag = process.env.UPSTREAM_TAG;
+              const matches = !data.draft && !data.prerelease &&
+                (body.includes('Upstream cloudflared: `' + upstreamTag + '`') ||
+                  body.includes('official cloudflared `' + upstreamTag + '`'));
+              core.setOutput('exists', matches ? 'true' : 'false');
             } catch (error) {
               if (error.status !== 404) throw error;
               core.setOutput('exists', 'false');
@@ -101,10 +114,12 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3.0.1
         with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          name: ${{ needs.prepare.outputs.tag }}
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
+          name: ${{ needs.prepare.outputs.version }}
           body: |
             pfSense package for official cloudflared `${{ needs.prepare.outputs.tag }}` built for FreeBSD 15 amd64 with BSD compatibility patches from `kjake/cloudflared`.
+            Package version: `${{ needs.prepare.outputs.version }}`.
+            Upstream cloudflared: `${{ needs.prepare.outputs.tag }}`.
           overwrite_files: true
           files: pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
 

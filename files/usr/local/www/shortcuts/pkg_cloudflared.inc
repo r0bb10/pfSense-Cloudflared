@@ -3,7 +3,7 @@
 global $shortcuts;
 
 $shortcuts['cloudflared'] = [];
-$shortcuts['cloudflared']['main'] = '/pkg_edit.php?xml=cloudflared.xml';
+$shortcuts['cloudflared']['main'] = '/cloudflared_settings.php';
 $shortcuts['cloudflared']['status'] = '/status_cloudflared.php';
 $shortcuts['cloudflared']['service'] = 'cloudflared';
 

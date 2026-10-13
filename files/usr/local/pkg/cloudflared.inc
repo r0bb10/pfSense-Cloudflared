@@ -114,7 +114,24 @@ function cloudflared_sync() {
 }
 
 function cloudflared_install() {
+	cloudflared_sync_menu();
 	cloudflared_write_files();
+}
+
+function cloudflared_sync_menu() {
+	$menus = config_get_path('installedpackages/menu', []);
+	foreach ($menus as $key => &$menu) {
+		if (($menu['configfile'] ?? '') !== 'cloudflared.xml') {
+			continue;
+		}
+		if (($menu['section'] ?? '') === 'Status') {
+			unset($menus[$key]);
+		} elseif (($menu['section'] ?? '') === 'Services') {
+			$menu['url'] = '/cloudflared_settings.php';
+		}
+	}
+	unset($menu);
+	config_set_path('installedpackages/menu', array_values($menus));
 }
 
 function cloudflared_deinstall() {
