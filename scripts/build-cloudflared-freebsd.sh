@@ -23,10 +23,13 @@ git checkout FETCH_HEAD -- \
 	diagnostic/system_collector_unix.go \
 	ingress/icmp_posix.go \
 	ingress/icmp_posix_test.go \
-	Makefile \
 	patches
 
 for patch in patches/*.patch; do
+	if git apply --reverse --check "${patch}" 2>/dev/null; then
+		echo "Patch already included upstream: ${patch}"
+		continue
+	fi
 	git apply --3way "${patch}"
 done
 
