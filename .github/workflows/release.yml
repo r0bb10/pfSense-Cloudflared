@@ -2,7 +2,7 @@ name: Track Upstream and Release
 
 on:
   schedule:
-    - cron: '17 */12 * * *'
+    - cron: '17 0 * * *'
   workflow_dispatch:
     inputs:
       tag:
@@ -11,10 +11,7 @@ on:
         type: string
 
 permissions:
-  actions: write
   contents: write
-  id-token: write
-  attestations: write
 
 concurrency:
   group: upstream-release
@@ -103,14 +100,6 @@ jobs:
             ./scripts/build-cloudflared-freebsd.sh '${{ needs.prepare.outputs.tag }}'
             ./build.sh package
             cp build/pkg/*.pkg ./pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
-      - name: Attest package
-        uses: actions/attest-build-provenance@v4.1.0
-        with:
-          subject-path: pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}
-          path: pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3.0.1
         with:
@@ -122,31 +111,3 @@ jobs:
             Upstream cloudflared: `${{ needs.prepare.outputs.tag }}`.
           overwrite_files: true
           files: pfSense-pkg-cloudflared-${{ needs.prepare.outputs.version }}.pkg
-
-  cleanup:
-    if: always() && needs.prepare.result == 'success'
-    needs: [prepare, build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Retain one previous run
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'release.yml',
-              status: 'completed',
-              per_page: 100
-            });
-            const previousRuns = runs
-              .filter((run) => run.id !== context.runId)
-              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-            for (const run of previousRuns.slice(1)) {
-              await github.rest.actions.deleteWorkflowRun({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                run_id: run.id
-              });
-            }

@@ -10,7 +10,6 @@ $priv_list['page-services-cloudflared']['match'][] = 'status_cloudflared.php*';
 $priv_list['page-services-cloudflared-update'] = [];
 $priv_list['page-services-cloudflared-update']['name'] = 'WebCfg - Services: Cloudflared: Update';
 $priv_list['page-services-cloudflared-update']['descr'] = 'Install Cloudflared packages from GitHub (executes package scripts as root)';
-// Action-only match checked explicitly by the Status page before updating.
 $priv_list['page-services-cloudflared-update']['match'] = ['cloudflared-update', 'status_cloudflared.php*'];
 $priv_list['page-services-cloudflared-update']['warn'] = 'standard-warning-root';
 

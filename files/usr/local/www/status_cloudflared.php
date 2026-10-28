@@ -4,83 +4,49 @@ require_once('guiconfig.inc');
 require_once('/usr/local/pkg/cloudflared.inc');
 require_once('/usr/local/pkg/cloudflared_update.inc');
 
-const CLOUDFLARED_BIN = '/usr/local/bin/cloudflared';
-
-$repository = config_get_path('installedpackages/cloudflared/updater/repository', CLOUDFLARED_UPDATE_REPOSITORY);
-$update_permissions = $_SESSION['page-match'] ?? [];
-// The action-only privilege is not a URL; pfSense's page matcher requires a real file.
-$can_update = isAdminUID($_SESSION['Username'] ?? '') ||
-	in_array('*', $update_permissions, true) || in_array('cloudflared-update', $update_permissions, true);
+$can_update = cloudflared_can_update();
 $input_errors = [];
+$automatic = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autocheck']);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	try {
 		if (!$can_update) {
 			http_response_code(403);
-			throw new RuntimeException('Cloudflared Update privilege is required to change or install package updates.');
+			throw new RuntimeException('The Cloudflared Update privilege is required.');
 		}
-		$repository = cloudflared_update_repository($_POST['repository'] ?? '');
-		$action = isset($_POST['install']) ? 'install' : (isset($_POST['check']) ? 'check' : '');
-		if (!in_array($action, ['check', 'install'], true)) {
+		if (isset($_POST['install']) === $automatic) {
 			throw new RuntimeException('Invalid update action.');
 		}
-		if (cloudflared_update_busy()) {
-			throw new RuntimeException('An update operation is already running.');
+		$repository = config_get_path('installedpackages/cloudflared/updater/repository', CLOUDFLARED_UPDATE_REPOSITORY);
+		try {
+			cloudflared_update_launch($automatic ? 'check' : 'install', $repository, $_POST['check_id'] ?? '', $automatic);
+		} catch (RuntimeException $error) {
+			if (!$automatic || $error->getCode() !== 409) {
+				throw $error;
+			}
 		}
-		$state = cloudflared_update_state();
-		if ($action === 'install' && (($state['status'] ?? '') !== 'available' || ($state['repository'] ?? '') !== $repository)) {
-			throw new RuntimeException('Refresh this repository before installing an update.');
+		if (!$automatic) {
+			header('Location: /status_cloudflared.php');
+			exit;
 		}
-		config_set_path('installedpackages/cloudflared/updater/repository', $repository);
-		write_config('Cloudflared: updated package repository');
-		cloudflared_update_launch($action, $repository);
-		header('Location: /status_cloudflared.php');
-		exit;
 	} catch (Throwable $error) {
 		$input_errors[] = $error->getMessage();
 	}
 }
 
-function cloudflared_command_output($command) {
-	$output = [];
-	$result = 0;
-	exec($command . ' 2>&1', $output, $result);
-	return trim(implode("\n", $output));
-}
-
-function cloudflared_redact($text) {
-	$text = preg_replace('/--token(?:=|\s+)\S+/', '--token [REDACTED]', (string)$text);
-	$text = preg_replace('/token(?:=|: )\S+/i', 'token=[REDACTED]', $text);
-	$text = preg_replace('/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/', '[REDACTED-JWT]', $text);
-	return $text;
-}
-
-if (isset($_GET['ajax'])) {
+if (isset($_GET['ajax']) || $automatic) {
 	header('Content-Type: application/json');
 	header('Cache-Control: no-store');
 	try {
-		$update = cloudflared_update_state();
-		$update['busy'] = cloudflared_update_busy();
-		$update['installed'] = cloudflared_update_installed();
-		$update['can_update'] = $can_update;
-		$update['checked'] = !empty($update['time']) ? cloudflared_log_time($update['time']) : '';
-		if (!$update['busy'] && in_array($update['status'] ?? '', ['queued', 'checking', 'installing'], true)) {
+		$update = cloudflared_update_summary($can_update);
+		if ($input_errors) {
 			$update['status'] = 'error';
-			$update['message'] = 'Update worker stopped unexpectedly. Refresh to retry; inspect the Recent Log below.';
+			$update['message'] = implode(' ', $input_errors);
 		}
 	} catch (Throwable $error) {
 		$update = ['status' => 'error', 'message' => $error->getMessage(), 'busy' => false, 'can_update' => $can_update];
 	}
-	$status = [
-		'enabled' => ((cloudflared_settings()['enable'] ?? '') === 'on'),
-		'running' => is_service_running('cloudflared'),
-		'token_configured' => is_readable(CLOUDFLARED_TOKEN_FILE) && filesize(CLOUDFLARED_TOKEN_FILE) > 0,
-		'protocol' => cloudflared_settings()['protocol'] ?? 'auto',
-		'loglevel' => cloudflared_settings()['loglevel'] ?? 'info',
-		'version' => is_executable(CLOUDFLARED_BIN) ? cloudflared_command_output(CLOUDFLARED_BIN . ' version') : 'cloudflared binary is missing',
-		'log' => cloudflared_redact(cloudflared_recent_log()),
-		'update' => $update,
-	];
-	echo json_encode($status);
+	echo json_encode(['runtime' => cloudflared_runtime_status(), 'log' => cloudflared_recent_log(),
+		'update' => $update, 'update_log' => $can_update && $update['status'] === 'error' ? cloudflared_recent_log(CLOUDFLARED_UPDATE_LOG) : ''], JSON_INVALID_UTF8_SUBSTITUTE);
 	exit;
 }
 
@@ -90,125 +56,79 @@ include('head.inc');
 if ($input_errors) {
 	print_input_errors($input_errors);
 }
-$tabs = [
-	[gettext('Settings'), false, '/cloudflared_settings.php'],
-	[gettext('Status'), true, '/status_cloudflared.php'],
-];
-display_top_tabs($tabs);
-
-?>
-<div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Service')?></h2></div>
-	<div class="panel-body form-horizontal">
-<?php
-foreach ([
-	'cloudflared-enabled' => 'Enabled',
-	'cloudflared-state' => 'State',
-	'cloudflared-token' => 'Token Configured',
-	'cloudflared-protocol' => 'Protocol',
-	'cloudflared-loglevel' => 'Log Level',
-	'cloudflared-version' => 'Version',
-] as $id => $label) {
-?>
-		<div class="form-group">
-			<label class="col-sm-2 control-label"><?=gettext($label)?></label>
-			<div class="col-sm-10"><span id="<?=$id?>">-</span></div>
-		</div>
-<?php
-}
-?>
-	</div>
-</div>
-
-<form method="post" action="/status_cloudflared.php" class="form-horizontal" id="cloudflared-update-form">
-	<div class="panel panel-default">
-		<div class="panel-heading"><h2 class="panel-title"><?=gettext('Updater')?></h2></div>
-		<div class="panel-body">
-<?php
-$repository_group = new Form_Group('GitHub Repository');
-$repository_input = new Form_Input('repository', 'GitHub Repository', 'url', $repository);
-$repository_input->setAttribute('required', true);
-$repository_input->setHelp('Only use a repository you trust: its packages execute as root. Refresh saves the URL and checks the latest stable release. Updates preserve tunnel settings but briefly interrupt the tunnel.');
-if (!$can_update) {
-	$repository_input->setAttribute('disabled', true);
-}
-$repository_group->add($repository_input);
-print $repository_group;
-foreach ([
-	'update-installed' => 'Installed Package',
-	'update-latest' => 'Latest Package',
-	'update-status' => 'Status',
-	'update-checked' => 'Last Checked',
-] as $id => $label) {
-?>
-			<div class="form-group">
-				<label class="col-sm-2 control-label"><?=gettext($label)?></label>
-				<div class="col-sm-10"><span id="<?=$id?>">-</span></div>
-			</div>
-<?php
-}
-$refresh = new Form_Button('check', 'Refresh', null, 'fa-solid fa-refresh');
-$refresh->setAttribute('id', 'update-refresh')->setAttribute('disabled', true)->addClass('btn-default');
+cloudflared_tabs('status');
 $install = new Form_Button('install', 'Update', null, 'fa-solid fa-download');
 $install->setAttribute('id', 'update-install')->setAttribute('disabled', true)->addClass('btn-primary');
-$buttons = new Form_StaticText(null, (string)$refresh . ' ' . (string)$install);
-if (!$can_update) {
-	$buttons->setHelp('The Cloudflared Update privilege is required to check or install updates.');
-}
-$button_group = new Form_Group(null);
-$button_group->add($buttons);
-print $button_group;
+$form = new Form($install);
+$form->setAction('/status_cloudflared.php');
+$form->setAttribute('id', 'cloudflared-update-form');
+$service = new Form_Section('Tunnel');
+$service->addInput(new Form_StaticText('Service', '<span id="cloudflared-state">Checking…</span>'));
+$service->addInput(new Form_StaticText('Edge Connections', '<span id="cloudflared-connection">Checking…</span>'));
+$form->add($service);
+
+$package = new Form_Section('Package Update');
+$package->addInput(new Form_StaticText('Installed Version', '<span id="update-installed">' .
+	htmlspecialchars(cloudflared_binary_version(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</span>'));
+$package->addInput(new Form_StaticText('Status',
+	'<span id="update-status" role="status" aria-live="polite">Checking…</span>' .
+	($can_update ? '<details id="update-error-details" class="hidden"><summary>' . gettext('Error details') . '</summary>' .
+	'<pre id="cloudflared-update-log" style="max-height: 10em; overflow: auto;"></pre></details>' : '')));
+$form->addGlobal(new Form_Input('check_id', null, 'hidden', ''));
+$form->add($package);
+print $form;
 ?>
-		</div>
-	</div>
-</form>
 
 <div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Recent Log')?></h2></div>
-	<div class="panel-body">
-		<pre id="cloudflared-log" style="max-height: 30em; overflow: auto;">-</pre>
-	</div>
+	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Recent Tunnel Log')?></h2></div>
+	<div class="panel-body"><pre id="cloudflared-log" style="max-height: 24em; overflow: auto;">—</pre></div>
 </div>
 
 <script>
-let updateState = {};
-function updateButtons() {
-	document.getElementById('update-refresh').disabled = !updateState.can_update || !!updateState.busy;
-	document.getElementById('update-install').disabled = !updateState.can_update || !!updateState.busy || updateState.status !== 'available' || document.getElementById('repository').value.replace(/\/+$/, '') !== updateState.repository;
-}
-document.getElementById('repository').addEventListener('input', updateButtons);
-document.getElementById('cloudflared-update-form').addEventListener('submit', function (event) {
-	if (event.submitter && event.submitter.id === 'update-install' && !confirm('Install the latest complete Cloudflared package? The tunnel will briefly restart.')) {
-		event.preventDefault();
+events.push(function () {
+	let updateState = {};
+	const install = document.getElementById('update-install');
+	const form = document.getElementById('cloudflared-update-form');
+	form.addEventListener('submit', function (event) {
+		if (event.submitter !== install || install.disabled || !updateState.check_id) {
+			event.preventDefault();
+		}
+	});
+	function render(data) {
+		document.getElementById('cloudflared-state').textContent = data.runtime.service;
+		document.getElementById('cloudflared-connection').textContent = data.runtime.connection;
+		document.getElementById('cloudflared-log').textContent = data.log || 'No readable tunnel log output.';
+		updateState = data.update;
+		document.getElementById('update-status').textContent = updateState.message;
+		document.getElementById('check_id').value = updateState.check_id || '';
+		install.disabled = !updateState.can_update || updateState.busy || updateState.status !== 'available';
+		const diagnostics = document.getElementById('cloudflared-update-log');
+		if (diagnostics) {
+			diagnostics.textContent = data.update_log || '';
+			document.getElementById('update-error-details').classList.toggle('hidden', updateState.status !== 'error' || !data.update_log);
+		}
 	}
+	async function refreshCloudflared(automatic = false) {
+		try {
+			const options = {cache: 'no-store', signal: AbortSignal.timeout(20000)};
+			if (automatic) {
+				options.method = 'POST';
+				options.body = new FormData(form);
+				options.body.set('autocheck', '1');
+			}
+			const response = await fetch('/status_cloudflared.php?ajax=1', options);
+			if (!response.ok) throw new Error('Cannot read status.');
+			render(await response.json());
+		} catch (error) {
+			document.getElementById('cloudflared-state').textContent = 'Status unavailable';
+			document.getElementById('cloudflared-connection').textContent = 'Unknown';
+			document.getElementById('update-status').textContent = 'Cannot read status. Reload or sign in again.';
+			install.disabled = true;
+		} finally {
+			setTimeout(refreshCloudflared, updateState.busy ? 2000 : 5000);
+		}
+	}
+	refreshCloudflared(<?= $can_update ? 'true' : 'false' ?>);
 });
-async function refreshCloudflared() {
-	try {
-		const response = await fetch('/status_cloudflared.php?ajax=1', {cache: 'no-store'});
-		if (!response.ok) throw new Error('Cannot read status.');
-		const data = await response.json();
-		document.getElementById('cloudflared-enabled').textContent = data.enabled ? 'Yes' : 'No';
-		document.getElementById('cloudflared-state').textContent = data.running ? 'Running' : 'Stopped';
-		document.getElementById('cloudflared-token').textContent = data.token_configured ? 'Yes' : 'No';
-		document.getElementById('cloudflared-protocol').textContent = data.protocol || 'auto';
-		document.getElementById('cloudflared-loglevel').textContent = data.loglevel || 'info';
-		document.getElementById('cloudflared-version').textContent = data.version || '-';
-		document.getElementById('cloudflared-log').textContent = data.log || 'No readable log output.';
-		updateState = data.update || {};
-		document.getElementById('update-installed').textContent = updateState.installed || '-';
-		document.getElementById('update-latest').textContent = updateState.latest || '-';
-		document.getElementById('update-status').textContent = updateState.message || 'Not checked. Click Refresh.';
-		document.getElementById('update-checked').textContent = updateState.checked || '-';
-		updateButtons();
-	} catch (error) {
-		document.getElementById('update-status').textContent = 'Cannot read status. Reload or sign in again.';
-		document.getElementById('update-refresh').disabled = true;
-		document.getElementById('update-install').disabled = true;
-	} finally {
-		setTimeout(refreshCloudflared, updateState.busy ? 2000 : 5000);
-	}
-}
-refreshCloudflared();
 </script>
-
 <?php include('foot.inc'); ?>

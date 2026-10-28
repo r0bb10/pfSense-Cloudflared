@@ -1,11 +1,14 @@
 <?php
 
 require_once('guiconfig.inc');
-require_once('service-utils.inc');
-require_once('util.inc');
+require_once('/usr/local/pkg/cloudflared.inc');
 
 if (isset($_POST['widgetkey']) || isset($_GET['widgetkey'])) {
 	$requested_widgetkey = $_POST['widgetkey'] ?? $_GET['widgetkey'];
+	if (!is_string($requested_widgetkey)) {
+		http_response_code(400);
+		exit;
+	}
 	[$widget_name, $widget_id] = array_pad(explode('-', $requested_widgetkey, 2), 2, null);
 	if ($widget_name === basename(__FILE__, '.widget.php') && is_numericint($widget_id)) {
 		$widgetkey = $requested_widgetkey;
@@ -25,13 +28,13 @@ function cloudflared_widget_escape($value) {
 }
 
 function cloudflared_widget_body() {
-	$running = is_service_running('cloudflared');
+	$status = cloudflared_runtime_status();
+	$running = $status['running'];
 	$service_icon = $running ? 'fa-arrow-up text-success' : 'fa-arrow-down text-danger';
-	$service_label = $running ? gettext('Running') : gettext('Stopped');
-	$version = is_executable('/usr/local/bin/cloudflared') ? trim(shell_exec('/usr/local/bin/cloudflared version 2>&1')) : gettext('Missing binary');
+	$service_label = gettext($status['service']);
 	$html = '';
 	$html .= '<tr><th>' . cloudflared_widget_escape(gettext('Service')) . '</th><td><i class="fa-solid ' . $service_icon . '"></i> ' . cloudflared_widget_escape($service_label) . '</td></tr>';
-	$html .= '<tr><th>' . cloudflared_widget_escape(gettext('Version')) . '</th><td>' . cloudflared_widget_escape($version) . '</td></tr>';
+	$html .= '<tr><th>' . cloudflared_widget_escape(gettext('Connections')) . '</th><td>' . cloudflared_widget_escape($status['connection']) . '</td></tr>';
 	return $html;
 }
 

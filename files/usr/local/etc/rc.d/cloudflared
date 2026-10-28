@@ -41,6 +41,6 @@ if [ "${cloudflared_extra_args}" != "" ]; then
 fi
 cloudflared_args="${cloudflared_args} run --token-file ${cloudflared_token_file}"
 
-command_args="-S -p ${pidfile} -T cloudflared -o ${cloudflared_logfile} -f ${procname} ${cloudflared_args}"
+command_args="-H -P /var/run/cloudflared-daemon.pid -p ${pidfile} -o ${cloudflared_logfile} -f ${procname} ${cloudflared_args}"
 
 run_rc_command "$1"

@@ -10,8 +10,13 @@ const CLOUDFLARED_TOKEN_FILE = CLOUDFLARED_CONFIG_DIR . '/token';
 const CLOUDFLARED_RCCONF = '/usr/local/etc/rc.conf.d/cloudflared';
 const CLOUDFLARED_LOG_FILE = '/var/log/cloudflared.log';
 
+function cloudflared_defaults() {
+	return ['enable' => '', 'token' => '', 'protocol' => 'auto', 'metrics' => '',
+		'loglevel' => 'info', 'quic_disable_pmtu' => '', 'extra_args' => ''];
+}
+
 function cloudflared_settings() {
-	return config_get_path('installedpackages/cloudflared/config/0', []);
+	return array_merge(cloudflared_defaults(), config_get_path('installedpackages/cloudflared/config/0', []));
 }
 
 function cloudflared_enabled() {
@@ -31,7 +36,8 @@ function cloudflared_validate(&$post, &$input_errors) {
 	}
 	if ($token !== '') {
 		$decoded = base64_decode($token, true);
-		if ($decoded === false || json_decode($decoded, true) === null) {
+		$credentials = $decoded === false ? null : json_decode($decoded, true);
+		if (!is_array($credentials) || !$credentials) {
 			$input_errors[] = gettext('Tunnel token must be a valid Cloudflare tunnel token.');
 		}
 	}
@@ -47,7 +53,7 @@ function cloudflared_validate(&$post, &$input_errors) {
 	}
 
 	$metrics = trim((string)($post['metrics'] ?? ''));
-	if ($metrics !== '' && !preg_match('/^[A-Za-z0-9_.:-]+:[0-9]{1,5}$/', $metrics)) {
+	if ($metrics !== '' && !preg_match('/^(?:[A-Za-z0-9_.-]+|\[[a-fA-F0-9:]+\]):[0-9]{1,5}$/D', $metrics)) {
 		$input_errors[] = gettext('Metrics address must look like 127.0.0.1:60123.');
 	}
 	if ($metrics !== '') {
@@ -58,30 +64,51 @@ function cloudflared_validate(&$post, &$input_errors) {
 	}
 
 	$extra_args = trim((string)($post['extra_args'] ?? ''));
-	if ($extra_args !== '' && preg_match('/[;&|`$<>\\]/', $extra_args)) {
-		$input_errors[] = gettext('Extra arguments contain unsupported shell metacharacters.');
+	if ($extra_args !== '' && !preg_match('#^[A-Za-z0-9_./:=,@%+\[\] -]+$#D', $extra_args)) {
+		$input_errors[] = gettext('Extra arguments must be plain space-separated arguments without quotes or shell metacharacters.');
+	}
+	if (preg_match('/(?:^| )--(?:token(?:-file)?|credentials-(?:file|contents)|config|logfile|loglevel|metrics|protocol|no-autoupdate|quic-disable-pmtu-discovery)(?:[= ]|$)/', $extra_args)) {
+		$input_errors[] = gettext('Use the dedicated settings for credentials, logging, metrics and transport, not Extra Arguments.');
+	}
+}
+
+function cloudflared_atomic_write($file, $contents, $mode = 0600) {
+	$directory = dirname($file);
+	if (!is_dir($directory) && !mkdir($directory, 0755, true)) {
+		throw new RuntimeException('Cannot create Cloudflared configuration directory.');
+	}
+	$tmp = tempnam($directory, '.cloudflared-');
+	if ($tmp === false) {
+		throw new RuntimeException('Cannot create temporary configuration file.');
+	}
+	try {
+		if (!chmod($tmp, $mode) || file_put_contents($tmp, $contents, LOCK_EX) !== strlen($contents) || !rename($tmp, $file)) {
+			throw new RuntimeException('Cannot write Cloudflared configuration file: ' . $file);
+		}
+	} finally {
+		if (is_file($tmp)) {
+			unlink($tmp);
+		}
 	}
 }
 
 function cloudflared_write_files() {
 	$settings = cloudflared_settings();
-	if (!is_dir(CLOUDFLARED_CONFIG_DIR)) {
-		mkdir(CLOUDFLARED_CONFIG_DIR, 0755, true);
+	$errors = [];
+	cloudflared_validate($settings, $errors);
+	if ($errors) {
+		throw new RuntimeException(implode(' ', $errors));
 	}
 
 	$token = trim((string)($settings['token'] ?? ''));
 	if ($token !== '') {
-		$tmp = CLOUDFLARED_TOKEN_FILE . '.tmp';
-		file_put_contents($tmp, $token . "\n", LOCK_EX);
-		chmod($tmp, 0600);
-		rename($tmp, CLOUDFLARED_TOKEN_FILE);
+		cloudflared_atomic_write(CLOUDFLARED_TOKEN_FILE, $token . "\n");
 	} else {
-		@unlink(CLOUDFLARED_TOKEN_FILE);
+		if (is_file(CLOUDFLARED_TOKEN_FILE) && !unlink(CLOUDFLARED_TOKEN_FILE)) {
+			throw new RuntimeException('Cannot remove the old tunnel token.');
+		}
 	}
 
-	if (!is_dir(dirname(CLOUDFLARED_RCCONF))) {
-		mkdir(dirname(CLOUDFLARED_RCCONF), 0755, true);
-	}
 	$enabled = cloudflared_enabled() ? 'YES' : 'NO';
 	$protocol = $settings['protocol'] ?? 'auto';
 	$metrics = trim((string)($settings['metrics'] ?? ''));
@@ -97,7 +124,10 @@ function cloudflared_write_files() {
 	$rcconf .= "cloudflared_quic_disable_pmtu=\"{$quic_disable_pmtu}\"\n";
 	$rcconf .= 'cloudflared_extra_args="' . cloudflared_quote_rc_value($extra_args) . "\"\n";
 	$rcconf .= 'cloudflared_logfile="' . CLOUDFLARED_LOG_FILE . "\"\n";
-	file_put_contents(CLOUDFLARED_RCCONF, $rcconf, LOCK_EX);
+	cloudflared_atomic_write(CLOUDFLARED_RCCONF, $rcconf);
+	// Rotate logs through the supervisor.
+	cloudflared_atomic_write('/var/etc/newsyslog.conf.d/cloudflared.conf',
+		CLOUDFLARED_LOG_FILE . " 600 3 1024 * JC /var/run/cloudflared-daemon.pid 1\n", 0644);
 }
 
 function cloudflared_sync() {
@@ -110,6 +140,13 @@ function cloudflared_sync() {
 		}
 	} elseif (is_service_running('cloudflared')) {
 		stop_service('cloudflared');
+	}
+	$deadline = microtime(true) + 15;
+	while (is_service_running('cloudflared') !== cloudflared_enabled() && microtime(true) < $deadline) {
+		usleep(250000);
+	}
+	if (is_service_running('cloudflared') !== cloudflared_enabled()) {
+		throw new RuntimeException('Settings saved, but the service did not reach the requested state. Inspect the tunnel log.');
 	}
 }
 
@@ -140,6 +177,7 @@ function cloudflared_deinstall() {
 	}
 	@unlink(CLOUDFLARED_TOKEN_FILE);
 	@unlink(CLOUDFLARED_RCCONF);
+	@unlink('/var/etc/newsyslog.conf.d/cloudflared.conf');
 }
 
-?>
+require_once(__DIR__ . '/cloudflared_runtime.inc');

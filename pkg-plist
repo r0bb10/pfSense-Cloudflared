@@ -2,6 +2,7 @@
 bin/cloudflared
 etc/rc.d/cloudflared
 pkg/cloudflared.inc
+pkg/cloudflared_runtime.inc
 pkg/cloudflared_update.inc
 pkg/cloudflared_update.php
 pkg/cloudflared.xml

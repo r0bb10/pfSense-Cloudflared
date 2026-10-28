@@ -43,6 +43,7 @@ stage() {
 	install -m 0555 "${FILES}${PREFIX}/etc/rc.d/cloudflared" "${STAGE}${PREFIX}/etc/rc.d/cloudflared"
 	install -m 0644 "${FILES}${PREFIX}/pkg/cloudflared.xml" "${STAGE}${PREFIX}/pkg/cloudflared.xml"
 	install -m 0644 "${FILES}${PREFIX}/pkg/cloudflared.inc" "${STAGE}${PREFIX}/pkg/cloudflared.inc"
+	install -m 0644 "${FILES}${PREFIX}/pkg/cloudflared_runtime.inc" "${STAGE}${PREFIX}/pkg/cloudflared_runtime.inc"
 	install -m 0644 "${FILES}${PREFIX}/pkg/cloudflared_update.inc" "${STAGE}${PREFIX}/pkg/cloudflared_update.inc"
 	install -m 0644 "${FILES}${PREFIX}/pkg/cloudflared_update.php" "${STAGE}${PREFIX}/pkg/cloudflared_update.php"
 	install -m 0644 "${FILES}${PREFIX}/www/shortcuts/pkg_cloudflared.inc" "${STAGE}${PREFIX}/www/shortcuts/pkg_cloudflared.inc"
